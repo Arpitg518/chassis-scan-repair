@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { ScanBarcode, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ScanBarcode, ArrowLeft, CheckCircle2, Camera } from "lucide-react";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { BarcodeScanner } from "@capacitor-mlkit/barcode-scanning";
 
 const ScanProduct = () => {
   const [chassisNo, setChassisNo] = useState("");
@@ -20,10 +21,10 @@ const ScanProduct = () => {
   const [selectedVehicleModel, setSelectedVehicleModel] = useState("");
   const [leakages, setLeakages] = useState<{ type: string; description: string }[]>([]);
   const [loading, setLoading] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [step, setStep] = useState(1);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const leakageTypes = [
     { value: "oil", label: "Oil Leakage" },
@@ -57,11 +58,50 @@ const ScanProduct = () => {
     if (data) setVehicleModels(data);
   };
 
-  const handleScan = async () => {
+  const startScan = async () => {
+    try {
+      setScanning(true);
+      
+      // Request camera permission
+      const { camera } = await BarcodeScanner.requestPermissions();
+      
+      if (camera === 'granted' || camera === 'limited') {
+        // Start scanning
+        const result = await BarcodeScanner.scan();
+        
+        if (result.barcodes && result.barcodes.length > 0) {
+          const scannedValue = result.barcodes[0].displayValue;
+          setChassisNo(scannedValue);
+          
+          toast({
+            title: "Scanned successfully!",
+            description: `Chassis No: ${scannedValue}`,
+          });
+        }
+      } else {
+        toast({
+          title: "Permission denied",
+          description: "Camera permission is required to scan barcodes",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Scanning error:", error);
+      toast({
+        title: "Scan failed",
+        description: "Unable to scan barcode. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const handleNext = async () => {
     if (!chassisNo.trim()) {
       toast({
         title: "Error",
-        description: "Please enter a chassis number",
+        description: "Please scan a chassis number first",
         variant: "destructive",
       });
       return;
@@ -187,33 +227,59 @@ const ScanProduct = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <ScanBarcode className="w-6 h-6 text-primary" />
-                  Step 1: Scan Product
+                  Step 1: Scan Chassis Number
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="chassisNo">Chassis Number</Label>
-                  <Input
-                    ref={inputRef}
-                    id="chassisNo"
-                    type="text"
-                    placeholder="Enter or scan chassis number"
-                    value={chassisNo}
-                    onChange={(e) => setChassisNo(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter") {
-                        handleScan();
-                      }
-                    }}
-                    className="text-lg"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Use a barcode scanner or type the chassis number manually
-                  </p>
-                </div>
-                <Button onClick={handleScan} disabled={loading} className="w-full" size="lg">
-                  {loading ? "Scanning..." : "Scan Product"}
-                </Button>
+                {chassisNo ? (
+                  <div className="space-y-4">
+                    <div className="p-4 bg-status-repaired/10 border border-status-repaired rounded-lg">
+                      <Label className="text-sm text-muted-foreground">Scanned Chassis Number</Label>
+                      <p className="text-2xl font-bold text-foreground mt-1">{chassisNo}</p>
+                    </div>
+                    <div className="flex gap-3">
+                      <Button 
+                        onClick={() => setChassisNo("")} 
+                        variant="outline" 
+                        className="flex-1"
+                      >
+                        Scan Again
+                      </Button>
+                      <Button 
+                        onClick={handleNext} 
+                        disabled={loading} 
+                        className="flex-1"
+                        size="lg"
+                      >
+                        {loading ? "Loading..." : "Next"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-center py-12 border-2 border-dashed border-border rounded-lg bg-muted/30">
+                      <div className="text-center">
+                        <Camera className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                        <p className="text-muted-foreground">
+                          Tap the button below to scan barcode
+                        </p>
+                      </div>
+                    </div>
+                    <Button 
+                      onClick={startScan} 
+                      disabled={scanning} 
+                      className="w-full" 
+                      size="lg"
+                    >
+                      {scanning ? "Scanning..." : (
+                        <>
+                          <Camera className="w-5 h-5 mr-2" />
+                          Scan Barcode
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
