@@ -14,114 +14,180 @@ export type Database = {
   }
   public: {
     Tables: {
-      leakage_reports: {
+      inspection_data: {
         Row: {
-          created_at: string
+          created_at: string | null
           id: string
-          product_id: string
+          leakage_type_id: string | null
+          machine_id: string
+          remarks: string | null
+          severity: string | null
           status: string
           tester_id: string
-          updated_at: string
-          vehicle_model_id: string
-          vehicle_type_id: string
+          updated_at: string | null
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           id?: string
-          product_id: string
+          leakage_type_id?: string | null
+          machine_id: string
+          remarks?: string | null
+          severity?: string | null
           status?: string
           tester_id: string
-          updated_at?: string
-          vehicle_model_id: string
-          vehicle_type_id: string
+          updated_at?: string | null
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           id?: string
-          product_id?: string
+          leakage_type_id?: string | null
+          machine_id?: string
+          remarks?: string | null
+          severity?: string | null
           status?: string
           tester_id?: string
-          updated_at?: string
-          vehicle_model_id?: string
-          vehicle_type_id?: string
+          updated_at?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "leakage_reports_product_id_fkey"
-            columns: ["product_id"]
+            foreignKeyName: "inspection_data_leakage_type_id_fkey"
+            columns: ["leakage_type_id"]
             isOneToOne: false
-            referencedRelation: "products"
+            referencedRelation: "leakage_types"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "leakage_reports_vehicle_model_id_fkey"
-            columns: ["vehicle_model_id"]
+            foreignKeyName: "inspection_data_machine_id_fkey"
+            columns: ["machine_id"]
             isOneToOne: false
-            referencedRelation: "vehicle_models"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "leakage_reports_vehicle_type_id_fkey"
-            columns: ["vehicle_type_id"]
-            isOneToOne: false
-            referencedRelation: "vehicle_types"
+            referencedRelation: "machines"
             referencedColumns: ["id"]
           },
         ]
       }
-      leakages: {
+      leakage_types: {
         Row: {
-          created_at: string
-          description: string | null
+          code: string
+          created_at: string | null
           id: string
-          leakage_type: Database["public"]["Enums"]["leakage_type"]
-          report_id: string
+          name: string
+          product_line_id: string
+          updated_at: string | null
         }
         Insert: {
-          created_at?: string
-          description?: string | null
+          code: string
+          created_at?: string | null
           id?: string
-          leakage_type: Database["public"]["Enums"]["leakage_type"]
-          report_id: string
+          name: string
+          product_line_id: string
+          updated_at?: string | null
         }
         Update: {
-          created_at?: string
-          description?: string | null
+          code?: string
+          created_at?: string | null
           id?: string
-          leakage_type?: Database["public"]["Enums"]["leakage_type"]
-          report_id?: string
+          name?: string
+          product_line_id?: string
+          updated_at?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "leakages_report_id_fkey"
-            columns: ["report_id"]
+            foreignKeyName: "leakage_types_product_line_id_fkey"
+            columns: ["product_line_id"]
             isOneToOne: false
-            referencedRelation: "leakage_reports"
+            referencedRelation: "product_lines"
             referencedColumns: ["id"]
           },
         ]
       }
-      products: {
+      machines: {
         Row: {
-          chassis_no: string
-          created_at: string
-          description: string | null
+          chassis_number: string
+          created_at: string | null
           id: string
-          product_name: string
+          model_id: string
+          updated_at: string | null
         }
         Insert: {
-          chassis_no: string
-          created_at?: string
-          description?: string | null
+          chassis_number: string
+          created_at?: string | null
           id?: string
-          product_name: string
+          model_id: string
+          updated_at?: string | null
         }
         Update: {
-          chassis_no?: string
-          created_at?: string
-          description?: string | null
+          chassis_number?: string
+          created_at?: string | null
           id?: string
-          product_name?: string
+          model_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "machines_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "models"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      models: {
+        Row: {
+          code: string
+          created_at: string | null
+          id: string
+          name: string
+          product_line_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          id?: string
+          name: string
+          product_line_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          id?: string
+          name?: string
+          product_line_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "models_product_line_id_fkey"
+            columns: ["product_line_id"]
+            isOneToOne: false
+            referencedRelation: "product_lines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_lines: {
+        Row: {
+          code: string
+          created_at: string | null
+          id: string
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -143,43 +209,49 @@ export type Database = {
         }
         Relationships: []
       }
-      repairs: {
+      repair_data: {
         Row: {
-          completed_at: string
-          created_at: string
+          completed_at: string | null
+          created_at: string | null
           id: string
+          inspection_id: string
+          notes: string | null
           photo_url: string | null
-          problem_description: string
-          repair_description: string
+          repair_status: string
           repairman_id: string
-          report_id: string
+          started_at: string | null
+          updated_at: string | null
         }
         Insert: {
-          completed_at?: string
-          created_at?: string
+          completed_at?: string | null
+          created_at?: string | null
           id?: string
+          inspection_id: string
+          notes?: string | null
           photo_url?: string | null
-          problem_description: string
-          repair_description: string
+          repair_status: string
           repairman_id: string
-          report_id: string
+          started_at?: string | null
+          updated_at?: string | null
         }
         Update: {
-          completed_at?: string
-          created_at?: string
+          completed_at?: string | null
+          created_at?: string | null
           id?: string
+          inspection_id?: string
+          notes?: string | null
           photo_url?: string | null
-          problem_description?: string
-          repair_description?: string
+          repair_status?: string
           repairman_id?: string
-          report_id?: string
+          started_at?: string | null
+          updated_at?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "repairs_report_id_fkey"
-            columns: ["report_id"]
-            isOneToOne: true
-            referencedRelation: "leakage_reports"
+            foreignKeyName: "repair_data_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspection_data"
             referencedColumns: ["id"]
           },
         ]
@@ -202,53 +274,6 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
-        }
-        Relationships: []
-      }
-      vehicle_models: {
-        Row: {
-          created_at: string
-          id: string
-          name: string
-          vehicle_type_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          name: string
-          vehicle_type_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          name?: string
-          vehicle_type_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "vehicle_models_vehicle_type_id_fkey"
-            columns: ["vehicle_type_id"]
-            isOneToOne: false
-            referencedRelation: "vehicle_types"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      vehicle_types: {
-        Row: {
-          created_at: string
-          id: string
-          name: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          name: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          name?: string
         }
         Relationships: []
       }
