@@ -7,15 +7,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Upload, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Upload, CheckCircle2, Camera } from "lucide-react";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 const RepairForm = () => {
-  const { reportId } = useParams();
-  const [report, setReport] = useState<any>(null);
-  const [problemDescription, setProblemDescription] = useState("");
-  const [repairDescription, setRepairDescription] = useState("");
+  const { inspectionId } = useParams();
+  const [inspection, setInspection] = useState<any>(null);
+  const [repairStatus, setRepairStatus] = useState("");
+  const [notes, setNotes] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -23,25 +24,30 @@ const RepairForm = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    loadReport();
-  }, [reportId]);
+    loadInspection();
+  }, [inspectionId]);
 
-  const loadReport = async () => {
-    const { data, error } = await supabase
-      .from("leakage_reports")
+  const loadInspection = async () => {
+    const { data, error } = await (supabase as any)
+      .from("inspection_data")
       .select(`
         *,
-        products(chassis_no, product_name, description),
-        vehicle_types(name),
-        vehicle_models(name),
-        leakages(leakage_type, description),
+        machines(
+          chassis_number,
+          models(
+            name,
+            code,
+            product_lines(name, code)
+          )
+        ),
+        leakage_types(name, code),
         profiles(full_name)
       `)
-      .eq("id", reportId)
+      .eq("id", inspectionId)
       .single();
 
     if (data) {
-      setReport(data);
+      setInspection(data);
     }
     setLoading(false);
   };
@@ -49,10 +55,10 @@ const RepairForm = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!problemDescription.trim() || !repairDescription.trim()) {
+    if (!repairStatus || !notes.trim()) {
       toast({
         title: "Missing information",
-        description: "Please fill in all required fields",
+        description: "Please fill in repair status and notes",
         variant: "destructive",
       });
       return;
@@ -75,7 +81,7 @@ const RepairForm = () => {
 
     if (photoFile) {
       const fileExt = photoFile.name.split(".").pop();
-      const fileName = `${reportId}-${Date.now()}.${fileExt}`;
+      const fileName = `${inspectionId}-${Date.now()}.${fileExt}`;
       
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("repair-photos")
@@ -95,12 +101,14 @@ const RepairForm = () => {
       }
     }
 
-    const { error } = await supabase.from("repairs").insert({
-      report_id: reportId,
+    const { error } = await (supabase as any).from("repair_data").insert({
+      inspection_id: inspectionId,
       repairman_id: user.id,
-      problem_description: problemDescription,
-      repair_description: repairDescription,
+      repair_status: repairStatus,
+      notes,
       photo_url: photoUrl,
+      started_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
     });
 
     if (error) {
@@ -115,10 +123,10 @@ const RepairForm = () => {
 
     toast({
       title: "Repair completed!",
-      description: "The repair has been submitted successfully. All users have been notified.",
+      description: "The repair has been submitted successfully. Admin has been notified.",
     });
     setSubmitting(false);
-    navigate("/dashboard");
+    navigate("/repair-queue");
   };
 
   if (loading) {
@@ -129,10 +137,10 @@ const RepairForm = () => {
     );
   }
 
-  if (!report) {
+  if (!inspection) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p>Report not found</p>
+        <p>Inspection not found</p>
       </div>
     );
   }
@@ -153,42 +161,50 @@ const RepairForm = () => {
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Report Details</CardTitle>
+                <CardTitle>Inspection Details</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm text-muted-foreground">Product</p>
-                    <p className="font-semibold">{report.products?.product_name}</p>
+                    <p className="text-sm text-muted-foreground">Product Line</p>
+                    <p className="font-semibold">{inspection.machines?.models?.product_lines?.code} - {inspection.machines?.models?.product_lines?.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Model</p>
+                    <p className="font-semibold">{inspection.machines?.models?.code} - {inspection.machines?.models?.name}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Chassis No</p>
-                    <p className="font-semibold">{report.products?.chassis_no}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Vehicle</p>
-                    <p className="font-semibold">
-                      {report.vehicle_types?.name} - {report.vehicle_models?.name}
-                    </p>
+                    <p className="font-semibold">{inspection.machines?.chassis_number}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Reported by</p>
-                    <p className="font-semibold">{report.profiles?.full_name}</p>
+                    <p className="font-semibold">{inspection.profiles?.full_name}</p>
                   </div>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground mb-2">Reported Leakages</p>
-                  <div className="space-y-2">
-                    {report.leakages?.map((leak: any, idx: number) => (
-                      <div key={idx} className="flex items-start gap-2 p-2 bg-muted rounded">
-                        <Badge variant="outline">{leak.leakage_type}</Badge>
-                        {leak.description && (
-                          <p className="text-sm text-muted-foreground">{leak.description}</p>
-                        )}
-                      </div>
-                    ))}
+                  <p className="text-sm text-muted-foreground mb-2">Leakage Type</p>
+                  <div className="p-3 bg-muted rounded-lg">
+                    <p className="font-medium">{inspection.leakage_types?.code} - {inspection.leakage_types?.name}</p>
                   </div>
                 </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Severity</p>
+                  <Badge 
+                    variant={
+                      inspection.severity === "High" ? "destructive" : 
+                      inspection.severity === "Medium" ? "default" : "secondary"
+                    }
+                  >
+                    {inspection.severity}
+                  </Badge>
+                </div>
+                {inspection.remarks && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Tester Remarks</p>
+                    <p className="text-sm bg-muted p-3 rounded-lg">{inspection.remarks}</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -199,42 +215,44 @@ const RepairForm = () => {
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="problem">Problem Identified *</Label>
-                    <Textarea
-                      id="problem"
-                      placeholder="Describe the problem you identified..."
-                      value={problemDescription}
-                      onChange={(e) => setProblemDescription(e.target.value)}
-                      required
-                      rows={3}
-                    />
+                    <Label htmlFor="status">Repair Status *</Label>
+                    <Select value={repairStatus} onValueChange={setRepairStatus}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select repair status" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-card z-50">
+                        <SelectItem value="Repairable">Repairable</SelectItem>
+                        <SelectItem value="Not Repairable">Not Repairable</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="repair">Repair Performed *</Label>
+                    <Label htmlFor="notes">Notes on Fix *</Label>
                     <Textarea
-                      id="repair"
+                      id="notes"
                       placeholder="Describe what you did to fix the problem..."
-                      value={repairDescription}
-                      onChange={(e) => setRepairDescription(e.target.value)}
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
                       required
-                      rows={3}
+                      rows={4}
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="photo">Upload Photo (Optional)</Label>
+                    <Label htmlFor="photo">Upload Photo as Proof (Optional)</Label>
                     <Input
                       id="photo"
                       type="file"
                       accept="image/*"
+                      capture="environment"
                       onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
                     />
                     {photoFile && (
-                      <p className="text-sm text-muted-foreground flex items-center gap-2">
-                        <Upload className="w-4 h-4" />
-                        {photoFile.name}
-                      </p>
+                      <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+                        <Camera className="w-5 h-5 text-primary" />
+                        <p className="text-sm font-medium">{photoFile.name}</p>
+                      </div>
                     )}
                   </div>
 

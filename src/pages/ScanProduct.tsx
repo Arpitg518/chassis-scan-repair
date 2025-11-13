@@ -14,48 +14,53 @@ import { BarcodeScanner } from "@capacitor-mlkit/barcode-scanning";
 
 const ScanProduct = () => {
   const [chassisNo, setChassisNo] = useState("");
-  const [product, setProduct] = useState<any>(null);
-  const [vehicleTypes, setVehicleTypes] = useState<any[]>([]);
-  const [vehicleModels, setVehicleModels] = useState<any[]>([]);
-  const [selectedVehicleType, setSelectedVehicleType] = useState("");
-  const [selectedVehicleModel, setSelectedVehicleModel] = useState("");
-  const [leakages, setLeakages] = useState<{ type: string; description: string }[]>([]);
+  const [machine, setMachine] = useState<any>(null);
+  const [productLines, setProductLines] = useState<any[]>([]);
+  const [models, setModels] = useState<any[]>([]);
+  const [leakageTypes, setLeakageTypes] = useState<any[]>([]);
+  const [selectedProductLine, setSelectedProductLine] = useState("");
+  const [selectedModel, setSelectedModel] = useState("");
+  const [selectedLeakageType, setSelectedLeakageType] = useState("");
+  const [severity, setSeverity] = useState("");
+  const [remarks, setRemarks] = useState("");
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [step, setStep] = useState(1);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const leakageTypes = [
-    { value: "oil", label: "Oil Leakage" },
-    { value: "coolant", label: "Coolant Leakage" },
-    { value: "hydraulic", label: "Hydraulic Leakage" },
-    { value: "fuel", label: "Fuel Leakage" },
-    { value: "air", label: "Air Leakage" },
-    { value: "other", label: "Other" },
-  ];
-
   useEffect(() => {
-    loadVehicleTypes();
+    loadProductLines();
   }, []);
 
   useEffect(() => {
-    if (selectedVehicleType) {
-      loadVehicleModels(selectedVehicleType);
+    if (selectedProductLine) {
+      loadModels(selectedProductLine);
+      loadLeakageTypes(selectedProductLine);
     }
-  }, [selectedVehicleType]);
+  }, [selectedProductLine]);
 
-  const loadVehicleTypes = async () => {
-    const { data } = await supabase.from("vehicle_types").select("*");
-    if (data) setVehicleTypes(data);
+  const loadProductLines = async () => {
+    const { data } = await (supabase as any).from("product_lines").select("*").order("name");
+    if (data) setProductLines(data);
   };
 
-  const loadVehicleModels = async (vehicleTypeId: string) => {
-    const { data } = await supabase
-      .from("vehicle_models")
+  const loadModels = async (productLineId: string) => {
+    const { data } = await (supabase as any)
+      .from("models")
       .select("*")
-      .eq("vehicle_type_id", vehicleTypeId);
-    if (data) setVehicleModels(data);
+      .eq("product_line_id", productLineId)
+      .order("name");
+    if (data) setModels(data);
+  };
+
+  const loadLeakageTypes = async (productLineId: string) => {
+    const { data } = await (supabase as any)
+      .from("leakage_types")
+      .select("*")
+      .eq("product_line_id", productLineId)
+      .order("name");
+    if (data) setLeakageTypes(data);
   };
 
   const startScan = async () => {
@@ -97,7 +102,7 @@ const ScanProduct = () => {
     }
   };
 
-  const handleNext = async () => {
+  const handleNext = () => {
     if (!chassisNo.trim()) {
       toast({
         title: "Error",
@@ -106,43 +111,14 @@ const ScanProduct = () => {
       });
       return;
     }
-
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("products")
-      .select("*")
-      .eq("chassis_no", chassisNo)
-      .single();
-
-    if (error || !data) {
-      toast({
-        title: "Product not found",
-        description: "No product found with this chassis number",
-        variant: "destructive",
-      });
-      setLoading(false);
-      return;
-    }
-
-    setProduct(data);
     setStep(2);
-    setLoading(false);
-  };
-
-  const handleAddLeakage = (type: string) => {
-    const existing = leakages.find((l) => l.type === type);
-    if (existing) {
-      setLeakages(leakages.filter((l) => l.type !== type));
-    } else {
-      setLeakages([...leakages, { type, description: "" }]);
-    }
   };
 
   const handleSubmit = async () => {
-    if (!selectedVehicleType || !selectedVehicleModel || leakages.length === 0) {
+    if (!selectedProductLine || !selectedModel || !selectedLeakageType || !severity) {
       toast({
         title: "Missing information",
-        description: "Please select vehicle type, model and at least one leakage",
+        description: "Please fill in all required fields",
         variant: "destructive",
       });
       return;
@@ -161,40 +137,54 @@ const ScanProduct = () => {
       return;
     }
 
-    const { data: report, error: reportError } = await supabase
-      .from("leakage_reports")
-      .insert({
-        product_id: product.id,
-        vehicle_type_id: selectedVehicleType,
-        vehicle_model_id: selectedVehicleModel,
-        tester_id: user.id,
-        status: "pending",
-      })
-      .select()
-      .single();
+    // First, check if machine exists or create it
+    let { data: existingMachine } = await (supabase as any)
+      .from("machines")
+      .select("id")
+      .eq("chassis_number", chassisNo)
+      .eq("model_id", selectedModel)
+      .maybeSingle();
 
-    if (reportError) {
-      toast({
-        title: "Error",
-        description: reportError.message,
-        variant: "destructive",
-      });
-      setLoading(false);
-      return;
+    let machineId = existingMachine?.id;
+
+    if (!machineId) {
+      const { data: newMachine, error: machineError } = await (supabase as any)
+        .from("machines")
+        .insert({
+          chassis_number: chassisNo,
+          model_id: selectedModel,
+        })
+        .select()
+        .single();
+
+      if (machineError) {
+        toast({
+          title: "Error",
+          description: machineError.message,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+      machineId = newMachine.id;
     }
 
-    const leakageInserts = leakages.map((l) => ({
-      report_id: report.id,
-      leakage_type: l.type as "oil" | "coolant" | "hydraulic" | "fuel" | "air" | "other",
-      description: l.description,
-    }));
+    // Create inspection record
+    const { error: inspectionError } = await (supabase as any)
+      .from("inspection_data")
+      .insert({
+        tester_id: user.id,
+        machine_id: machineId,
+        leakage_type_id: selectedLeakageType,
+        severity,
+        remarks,
+        status: "Pending",
+      });
 
-    const { error: leakageError } = await supabase.from("leakages").insert(leakageInserts);
-
-    if (leakageError) {
+    if (inspectionError) {
       toast({
         title: "Error",
-        description: leakageError.message,
+        description: inspectionError.message,
         variant: "destructive",
       });
       setLoading(false);
@@ -203,7 +193,7 @@ const ScanProduct = () => {
 
     toast({
       title: "Report submitted!",
-      description: "The leakage report has been submitted successfully",
+      description: "The inspection report has been submitted successfully",
     });
     setLoading(false);
     navigate("/dashboard");
@@ -284,64 +274,40 @@ const ScanProduct = () => {
             </Card>
           )}
 
-          {step === 2 && product && (
+          {step === 2 && (
             <div className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Product Information</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Chassis No</p>
-                      <p className="font-semibold">{product.chassis_no}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Product Name</p>
-                      <p className="font-semibold">{product.product_name}</p>
-                    </div>
-                  </div>
-                  {product.description && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Description</p>
-                      <p className="text-sm">{product.description}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Step 2: Vehicle Information</CardTitle>
+                  <CardTitle>Step 2: Select Product Line & Model</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Vehicle Type</Label>
-                    <Select value={selectedVehicleType} onValueChange={setSelectedVehicleType}>
+                    <Label>Product Line *</Label>
+                    <Select value={selectedProductLine} onValueChange={setSelectedProductLine}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select vehicle type" />
+                        <SelectValue placeholder="Select product line (TLB, VC, SSL, CHEX)" />
                       </SelectTrigger>
                       <SelectContent className="bg-card z-50">
-                        {vehicleTypes.map((type) => (
-                          <SelectItem key={type.id} value={type.id}>
-                            {type.name}
+                        {productLines.map((line) => (
+                          <SelectItem key={line.id} value={line.id}>
+                            {line.code} - {line.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {selectedVehicleType && (
+                  {selectedProductLine && (
                     <div className="space-y-2">
-                      <Label>Vehicle Model</Label>
-                      <Select value={selectedVehicleModel} onValueChange={setSelectedVehicleModel}>
+                      <Label>Model *</Label>
+                      <Select value={selectedModel} onValueChange={setSelectedModel}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select vehicle model" />
+                          <SelectValue placeholder="Select model" />
                         </SelectTrigger>
-                        <SelectContent className="bg-card z-50">
-                          {vehicleModels.map((model) => (
+                        <SelectContent className="bg-card z-50 max-h-[300px]">
+                          {models.map((model) => (
                             <SelectItem key={model.id} value={model.id}>
-                              {model.name}
+                              {model.code} - {model.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -351,57 +317,64 @@ const ScanProduct = () => {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Step 3: Report Leakages</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-3">
-                    {leakageTypes.map((type) => {
-                      const isSelected = leakages.some((l) => l.type === type.value);
-                      return (
-                        <div key={type.value} className="flex items-start gap-3 p-3 border rounded-lg">
-                          <Checkbox
-                            checked={isSelected}
-                            onCheckedChange={() => handleAddLeakage(type.value)}
-                            id={type.value}
-                          />
-                          <div className="flex-1">
-                            <Label htmlFor={type.value} className="cursor-pointer font-medium">
-                              {type.label}
-                            </Label>
-                            {isSelected && (
-                              <Input
-                                placeholder="Add description (optional)"
-                                value={leakages.find((l) => l.type === type.value)?.description || ""}
-                                onChange={(e) => {
-                                  setLeakages(
-                                    leakages.map((l) =>
-                                      l.type === type.value ? { ...l, description: e.target.value } : l
-                                    )
-                                  );
-                                }}
-                                className="mt-2"
-                              />
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+              {selectedProductLine && selectedModel && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Step 3: Report Leakage</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Leakage Type *</Label>
+                      <Select value={selectedLeakageType} onValueChange={setSelectedLeakageType}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select leakage type" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-card z-50 max-h-[300px]">
+                          {leakageTypes.map((type) => (
+                            <SelectItem key={type.id} value={type.id}>
+                              {type.code} - {type.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                  <div className="pt-4">
-                    <Button onClick={handleSubmit} disabled={loading} className="w-full" size="lg">
-                      {loading ? "Submitting..." : (
-                        <>
-                          <CheckCircle2 className="w-5 h-5 mr-2" />
-                          Submit Report
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                    <div className="space-y-2">
+                      <Label>Severity *</Label>
+                      <Select value={severity} onValueChange={setSeverity}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select severity level" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-card z-50">
+                          <SelectItem value="Low">Low</SelectItem>
+                          <SelectItem value="Medium">Medium</SelectItem>
+                          <SelectItem value="High">High</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Remarks (Optional)</Label>
+                      <Input
+                        placeholder="Add any additional notes..."
+                        value={remarks}
+                        onChange={(e) => setRemarks(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="pt-4">
+                      <Button onClick={handleSubmit} disabled={loading} className="w-full" size="lg">
+                        {loading ? "Submitting..." : (
+                          <>
+                            <CheckCircle2 className="w-5 h-5 mr-2" />
+                            Submit Inspection Report
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
         </main>
